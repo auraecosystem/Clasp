@@ -320,13 +320,28 @@ export class Project {
   /**
    * Creates a new deployment or updates an existing one for the Apps Script project.
    * If `versionNumber` is not provided, a new script version is created with the given `description`.
+   *
+   * New optional parameters `access` and `executeAs` allow specifying WebAppConfig
+   * for WEB_APP entryPoints. These values are read from the CLI flags if provided,
+   * otherwise they are derived from the local appsscript.json manifest (webapp).
+   * CLI flags take precedence over manifest values. If neither source provides values,
+   * no entryPoints are sent and behavior is unchanged.
+   *
    * @param {string} [description=''] - Description for the new version (if created) or deployment.
    * @param {string} [deploymentId] - Optional ID of an existing deployment to update. If not provided, a new deployment is created.
    * @param {number} [versionNumber] - Optional specific script version number to deploy.
+   * @param {string} [access] - Optional access setting for WEB_APP (e.g., 'ANYONE').
+   * @param {string} [executeAs] - Optional executeAs setting for WEB_APP (e.g., 'USER_DEPLOYING').
    * @returns {Promise<script_v1.Schema$Deployment>} A promise that resolves to the deployment object.
    * @throws {Error} If there's an API error or authentication/configuration issues.
    */
-  async deploy(description = '', deploymentId?: string, versionNumber?: number): Promise<script_v1.Schema$Deployment> {
+  async deploy(
+    description = '',
+    deploymentId?: string,
+    versionNumber?: number,
+    access?: string,
+    executeAs?: string,
+  ): Promise<script_v1.Schema$Deployment> {
     debug('Deploying project: %s (%s)', description, versionNumber ?? 'HEAD');
     assertAuthenticated(this.options);
     assertScriptConfigured(this.options);
@@ -342,11 +357,45 @@ export class Project {
 
     const script = google.script({version: 'v1', auth: credentials});
 
+    // Read manifest if present to derive webapp settings when CLI flags are absent.
+    let manifest: Manifest | undefined;
+    try {
+      manifest = await this.readManifest();
+    } catch (err) {
+      // If manifest cannot be read (e.g., missing), treat as undefined and continue.
+      manifest = undefined;
+    }
+
+    const manifestWebapp = manifest?.webapp;
+    const effectiveAccess = access ?? manifestWebapp?.access;
+    const effectiveExecuteAs = executeAs ?? manifestWebapp?.executeAs;
+
+    // Build entryPointConfig only if at least one of the values is provided.
+    let entryPoints: script_v1.Schema$EntryPoint[] | undefined;
+    if (effectiveAccess !== undefined || effectiveExecuteAs !== undefined) {
+      const entryPointConfig: {[key: string]: any} = {};
+      if (effectiveAccess !== undefined) {
+        entryPointConfig.access = effectiveAccess;
+      }
+      if (effectiveExecuteAs !== undefined) {
+        entryPointConfig.executeAs = effectiveExecuteAs;
+      }
+      entryPoints = [
+        {
+          entryPointType: 'WEB_APP',
+          webApp: {
+            entryPointConfig: entryPointConfig,
+          },
+        } as script_v1.Schema$EntryPoint,
+      ];
+      debug('Using entryPoints for deployment: %O', entryPoints);
+    }
+
     try {
       let deployment: script_v1.Schema$Deployment | undefined;
       // If no deploymentId is provided, create a new deployment.
       if (!deploymentId) {
-        const requestOptions = {
+        const requestOptions: any = {
           scriptId: scriptId, // The scriptId must be provided in the request body for create.
           requestBody: {
             description: description ?? '',
@@ -354,12 +403,18 @@ export class Project {
             manifestFileName: 'appsscript',
           },
         };
+
+        if (entryPoints) {
+          // Attach entryPoints to the create request if provided.
+          requestOptions.requestBody.entryPoints = entryPoints;
+        }
+
         debug('Creating deployment with request %O', requestOptions);
         const res = await script.projects.deployments.create(requestOptions);
         deployment = res.data;
       } else {
         // If a deploymentId is provided, update the existing deployment.
-        const requestOptions = {
+        const requestOptions: any = {
           scriptId: scriptId, // Path parameter for the scriptId.
           deploymentId: deploymentId, // Path parameter for the deploymentId to update.
           requestBody: {
@@ -371,6 +426,12 @@ export class Project {
             },
           },
         };
+
+        if (entryPoints) {
+          // Attach entryPoints under deploymentConfig for updates.
+          requestOptions.requestBody.deploymentConfig.entryPoints = entryPoints;
+        }
+
         debug('Updating existing deployment with request %O', requestOptions);
         const res = await script.projects.deployments.update(requestOptions);
         deployment = res.data;
