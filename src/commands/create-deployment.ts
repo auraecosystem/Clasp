@@ -24,6 +24,8 @@ interface CommandOptions extends GlobalOptions {
   readonly versionNumber?: number;
   readonly description?: string;
   readonly deploymentId?: string;
+  readonly access?: string;
+  readonly executeAs?: string;
 }
 
 export const command = new Command('create-deployment')
@@ -32,6 +34,8 @@ export const command = new Command('create-deployment')
   .option('-V, --versionNumber <version>', 'The project version')
   .option('-d, --description <description>', 'The deployment description')
   .option('-i, --deploymentId <id>', 'The deployment ID to redeploy')
+  .option('--access <access>', 'Web app access permission')
+  .option('--executeAs <executeAs>', 'Web app executeAs setting')
   .action(async function (this: Command): Promise<void> {
     const options: CommandOptions = this.optsWithGlobals();
     const clasp: Clasp = options.clasp;
@@ -44,7 +48,7 @@ export const command = new Command('create-deployment')
         defaultMessage: 'Deploying project...',
       });
       const deployment = await withSpinner(spinnerMsg, async () => {
-        return clasp.project.deploy(description, deploymentId, versionNumber);
+        return clasp.project.deploy(description, deploymentId, versionNumber, options.access, options.executeAs);
       });
 
       if (options.json) {
