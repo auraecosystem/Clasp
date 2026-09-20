@@ -24,7 +24,7 @@ interface CommandOptions extends GlobalOptions {}
 
 export const command = new Command('list-deployments')
   .alias('deployments')
-  .description('List deployment ids of a script')
+  .description('List deployment IDs of a script')
   .argument('[scriptId]', 'Apps Script ID to list deployments for')
   .action(async function (this: Command, scriptId?: string): Promise<void> {
     const options: CommandOptions = this.optsWithGlobals();
