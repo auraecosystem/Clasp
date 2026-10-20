@@ -78,13 +78,24 @@ If you get an "Script API executable not published/deployed." error, deploy your
 
 ### Run a function that requires scopes
 
-Many Apps Script functions require special OAuth Scopes (Gmail, Drive, etc.).
+Many Apps Script functions require special OAuth scopes (Gmail, Drive, etc.).
 
-To run functions that use these scopes, you must add the scopes to your Apps Script manifest and `clasp login` again.
+The editor's **File > Project Properties > Scopes** list is read-only. It shows what the script already uses. It is not where you grant `clasp run` those scopes. Put them in `appsscript.json` and log in again so the OAuth client requests them.
 
-- `clasp open-script`
-- `File > Project Properties > Scopes`
-- Add these [scopes to your `appsscript.json`](https://developers.google.com/apps-script/concepts/scopes#set-explicit).
-- Log in again: `clasp login --user <name> --use-project-scopes --include-clasp-scopes --creds creds.json`. This combines your manifest scopes with default clasp scopes in one credential profile.
-- For additional one-off OAuth scopes, include `--extra-scopes` as a comma-separated list with no empty values.
-- `clasp run --user <name> sendMail`
+1. Add the scopes to [`oauthScopes` in `appsscript.json`](https://developers.google.com/apps-script/concepts/scopes#set-explicit):
+
+    ```json
+    {
+      "timeZone": "America/New_York",
+      "exceptionLogging": "STACKDRIVER",
+      "oauthScopes": [
+        "https://www.googleapis.com/auth/script.external_request",
+        "https://mail.google.com/"
+      ]
+    }
+    ```
+
+1. `clasp push` so the remote project has the same manifest.
+1. Log in again: `clasp login --user <name> --use-project-scopes --include-clasp-scopes --creds creds.json`. This combines your manifest scopes with default clasp scopes in one credential profile.
+1. For additional one-off OAuth scopes, include `--extra-scopes` as a comma-separated list with no empty values.
+1. `clasp run --user <name> sendMail`
